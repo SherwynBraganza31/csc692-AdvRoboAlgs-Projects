@@ -10,6 +10,7 @@ import json
 import numpy as np
 import matplotlib.animation as anim
 import matplotlib.pyplot as plt
+from scipy.integrate import solve_ivp
 import differential_drive as dd
 
 """
@@ -33,8 +34,10 @@ r = 0.5
 w = 1
 k_dir = 1
 count = 0
-start = (0,0,0)
-current_orientation = start
+start = [0,0,0]
+predicted_state = start
+sensed_state = start
+actual_state = start
 
 """
 Lidar variables
@@ -51,6 +54,12 @@ robot_width = 0.1
 robot_length = 0.2
 robot_radius = 0.05
 robot1 = dd.DifferentialDrive(robot_width, robot_length, robot_radius)
+time_step = 0.02
+"""
+Mapping Variables
+"""
+landmarks = []
+
 
 """
 Finds the point "distance" units away from the current position(state) 
@@ -78,6 +87,26 @@ def identify_landmark(lidar_distances: np.array, state: list) -> list:
                                                        lidar_distances[anomaly]))
     return landmark_coods
 
+"""
+Detects drift and locates the robots from the the sensors
+
+If a newly detected landmark is within <distance_step> of a previously detected
+landmark, its probably the same landmark but the robot has drifted. Using this 
+information of drift, the "sensed_state" is calculated as an alternative to 
+the predicted_state obtained from just the physics
+"""
+def grab_sensed_state(new_landmarks: list, predicted_state, distance_step = min_anomaly_distance):
+    sensed_state = []
+    for x in new_landmarks:
+        for old in landmarks[-4:-1]:
+            if math.sqrt((x[0] - old[0])**2 + (x[1] - old[1])**2) < distance_step:
+                drift = [[x[0] - old[0]],
+                          x[1] - old[1]]
+                sensed_state = [ [sensed_state[0]/2 + (predicted_state[0] + drift[0])/2]
+                                 [sensed_state[1]/2 + (predicted_state[1] + drift[1])/2] ]
+
+    return sensed_state
+
 
 while True:
     # if k > 1:
@@ -96,7 +125,13 @@ while True:
         min_angle = -np.pi / 2 + min_index * angle_interval
         min_dist = lidar_dists[min_index]
 
-        if min_dist < 0.8 * max_dist:
+        newfound_landmarks = identify_landmark(lidar_dists, predicted_state)
+        sensed_state = grab_sensed_state(newfound_landmarks, predicted_state=predicted_state)
+
+        # TODO Insert EKF prediction for actual state here using the above calculated states
+
+        # general robot navigational metrics
+        if min_dist < 0.8 * max_dist: # get too close to an object, rotate a little CC.
             k = -10 * np.copysign(np.exp(-np.abs(min_angle)), min_angle)
             print(k)
             if not np.isfinite(k):
@@ -112,6 +147,13 @@ while True:
         wheel_speeds = {"omega1": omega1, "omega2": omega2}
         pub_socket.send_multipart(
             [b"wheel_speeds", json.dumps(wheel_speeds).encode()])
+
+
+        predicted_state = solve_ivp(robot1.deriv, [0, time_step],
+                        predicted_state, args=[[omega1, omega2], 0])
+        landmarks += newfound_landmarks
+
+
         # print(count)
         count += 1
 
