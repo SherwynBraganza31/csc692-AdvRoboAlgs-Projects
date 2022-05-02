@@ -65,7 +65,7 @@ landmarks = []
 Finds the point "distance" units away from the current position(state) 
 """
 def parametric_point_locator(state: list, angle:float, distance:float) -> list:
-    return [ [state[0]+ distance*math.cos(state[3]+angle)], [state[1]+ distance*math.sin(state[3]+angle)] ]
+    return [ [state[0]+ distance*math.cos(state[2]+angle)], [state[1]+ distance*math.sin(state[2]+angle)] ]
 
 """
 Detects for anomalies.
