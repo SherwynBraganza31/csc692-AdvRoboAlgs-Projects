@@ -170,9 +170,9 @@ def producer():
             message_dict = json.loads(message_str.decode())
             omega1 = message_dict["omega1"]
             omega2 = message_dict["omega2"]
-            # print(omega1, omega2)
+            print("Received from controller {} and {}".format(omega1, omega2))
         except zmq.ZMQError:
-            print("nothing received")
+            # print("nothing received")
             pass
 
         noisy_omega1, noisy_omega2 = add_wheel_noise(omega1, omega2)

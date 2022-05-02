@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Created on 05/01/2022
 
@@ -25,6 +27,11 @@ sub_socket = context.socket(zmq.SUB)
 # sub_socket.connect("ipc:///tmp/robo_sim/sub.ipc")
 sub_socket.connect("tcp://localhost:5555")
 
+sub_socket.setsockopt(zmq.SUBSCRIBE, b"state")
+sub_socket.setsockopt(zmq.SUBSCRIBE, b"collision")
+sub_socket.setsockopt(zmq.SUBSCRIBE, b"lidar")
+sub_socket.setsockopt(zmq.SUBSCRIBE, b"landmarks")
+
 """
 State Variables Initialization
 """
@@ -44,7 +51,7 @@ Lidar variables
 """
 max_dist = 0.5
 # minimum distances b/w consecutive lidar sweeps to be considered as an anomaly
-min_anomaly_distance = 0.3 * max_dist
+min_anomaly_distance = 0.5 * max_dist
 angle_interval = np.pi / 19
 
 """
@@ -55,17 +62,19 @@ robot_length = 0.2
 robot_radius = 0.05
 robot1 = dd.DifferentialDrive(robot_width, robot_length, robot_radius)
 time_step = 0.02
+
 """
 Mapping Variables
 """
 landmarks = []
+predicted_path_points = []
 
 
 """
 Finds the point "distance" units away from the current position(state) 
 """
 def parametric_point_locator(state: list, angle:float, distance:float) -> list:
-    return [ [state[0]+ distance*math.cos(state[2]+angle)], [state[1]+ distance*math.sin(state[2]+angle)] ]
+    return [state[0]+ distance*math.cos(state[2]+angle), state[1]+ distance*math.sin(state[2]+angle)]
 
 """
 Detects for anomalies.
@@ -78,7 +87,7 @@ def identify_landmark(lidar_distances: np.array, state: list) -> list:
     landmark_coods = []
 
     for index in range(1, len(lidar_distances)):
-        if abs(lidar_distances[index-1] - lidar_distances[index]) < min_anomaly_distance:
+        if abs(lidar_distances[index-1] - lidar_distances[index]) > min_anomaly_distance:
             anomaly_indices.append(index)
 
     for anomaly in anomaly_indices:
@@ -95,17 +104,17 @@ landmark, its probably the same landmark but the robot has drifted. Using this
 information of drift, the "sensed_state" is calculated as an alternative to 
 the predicted_state obtained from just the physics
 """
-def grab_sensed_state(new_landmarks: list, predicted_state, distance_step = min_anomaly_distance):
-    sensed_state = []
+def grab_sensed_state(new_landmarks: list, predicted_state, sensed_state, distance_step = 0.1 * min_anomaly_distance):
+    new_sensed_state = sensed_state
     for x in new_landmarks:
         for old in landmarks[-4:-1]:
-            if math.sqrt((x[0] - old[0])**2 + (x[1] - old[1])**2) < distance_step:
-                drift = [[x[0] - old[0]],
-                          x[1] - old[1]]
-                sensed_state = [ [sensed_state[0]/2 + (predicted_state[0] + drift[0])/2]
-                                 [sensed_state[1]/2 + (predicted_state[1] + drift[1])/2] ]
+            if math.sqrt((x[0] - old[0])**2 + (x[1] - old[1])**2) > distance_step:
+                drift = [ x[0] - old[0],
+                          x[1] - old[1] ]
+                new_sensed_state = [ new_sensed_state[0]/2 + (predicted_state[0] + drift[0])/2,
+                                 new_sensed_state[1]/2 + (predicted_state[1] + drift[1])/2 ]
 
-    return sensed_state
+    return new_sensed_state
 
 
 while True:
@@ -126,7 +135,8 @@ while True:
         min_dist = lidar_dists[min_index]
 
         newfound_landmarks = identify_landmark(lidar_dists, predicted_state)
-        sensed_state = grab_sensed_state(newfound_landmarks, predicted_state=predicted_state)
+        sensed_state = grab_sensed_state(newfound_landmarks, sensed_state=sensed_state,
+                                         predicted_state=predicted_state)
 
         # TODO Insert EKF prediction for actual state here using the above calculated states
 
@@ -148,11 +158,10 @@ while True:
         pub_socket.send_multipart(
             [b"wheel_speeds", json.dumps(wheel_speeds).encode()])
 
+        predicted_state = list((solve_ivp(robot1.deriv, [0, time_step],
+                    predicted_state, args=[[omega1, omega2], 0])).y[:,-1])
 
-        predicted_state = solve_ivp(robot1.deriv, [0, time_step],
-                        predicted_state, args=[[omega1, omega2], 0])
         landmarks += newfound_landmarks
-
 
         # print(count)
         count += 1
