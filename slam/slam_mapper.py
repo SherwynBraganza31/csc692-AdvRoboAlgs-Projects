@@ -68,7 +68,7 @@ Mapping Variables
 """
 landmarks = []
 predicted_path_points = []
-
+actual_path_points = []
 
 """
 Finds the point "distance" units away from the current position(state) 
@@ -163,9 +163,15 @@ while True:
 
         landmarks += newfound_landmarks
 
+        actual_path_points.append(sensed_state)
         # print(count)
         count += 1
 
+        if count % 100 == 0:
+            plt.plot(list(x[0] for x in predicted_path_points), list(y[1] for y in predicted_path_points))
+            plt.plot(list(x[0] for x in actual_path_points), list(y[1] for y in actual_path_points))
+            plt.scatter(list(x[0] for x in actual_path_points), list(y[1] for y in actual_path_points))
+            plt.show()
 
 
 
