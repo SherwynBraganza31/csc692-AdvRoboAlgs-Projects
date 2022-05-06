@@ -5,7 +5,6 @@ Created on Mon Apr 11 09:00:06 2022
 
 @author: jonathan
 """
-
 import zmq
 import time
 import differential_drive as dd
