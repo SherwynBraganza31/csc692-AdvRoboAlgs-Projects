@@ -17,6 +17,7 @@ import differential_drive as dd
 import shapely.geometry as geom
 import shapely.affinity as aff
 import descartes as dc
+from differential_drive import DifferentialDrive
 
 """
 ZMQ Initialization
@@ -65,8 +66,9 @@ Robot Dimension Variables
 robot_width = 0.1
 robot_length = 0.2
 robot_radius = 0.05
-robot1 = dd.DifferentialDrive(robot_width, robot_length, robot_radius)
 time_step = 0.02
+robot1 = dd.DifferentialDrive(robot_width, robot_length, robot_radius)
+
 
 """
 Mapping Variables
@@ -155,10 +157,10 @@ def refactor_landmarks(new_landmarks:list, landmarks:list, delta_d):
                         angle
                     ]
                 else:
-                    landmarks.append([new_land, new_land[1], new_land[2]])
+                    landmarks.append(new_land)
         return landmarks
     else:
-        return new_landmarks
+        return [x for x in new_landmarks]
 
 """
 Detects drift and locates the robots from the the sensors
@@ -196,9 +198,15 @@ def filter_kalman():
     var2 = 1
 
     # Filter Variables
-    H = np.matrix([[1,0], [0, 0]])
+    H = np.matrix(([1,0,0],
+                  [0,1,0],
+                  [0,0,0]))
     HT = np.transposee(H)
-    V = np.matrix([[var1, 0], [0, var1]])
+
+    sigma = 1 # standard deviation of noise assuming its normally distributed
+    V = np.matrix(([sigma**2, 0],
+                   [0, sigma**2]))
+
     W = np.matrix([[var2, 0], [0, 0]])
     P = np.zeros(2, 2)  # initial covariance with 0 values
     x_est = np.zeros(2, N)  # initially start at 0
@@ -261,9 +269,9 @@ while True:
         count += 1
 
         if count % 100 == 0:
-            plt.plot(list(x[0] for x in predicted_path_points), list(y[1] for y in predicted_path_points))
-            plt.plot(list(x[0] for x in actual_path_points), list(y[1] for y in actual_path_points))
-            plt.scatter(list(x[0] for x in actual_path_points), list(y[1] for y in actual_path_points))
+            plt.plot(list(x[0] for x in predicted_path_points), list(y[1] for y in predicted_path_points), color='red')
+            plt.plot(list(x[0] for x in actual_path_points), list(y[1] for y in actual_path_points), color= 'green')
+            plt.scatter(list(x[0].centroid.x for x in landmarks_repo), list(y[0].centroid.y for y in landmarks_repo))
             plt.show()
 
 
