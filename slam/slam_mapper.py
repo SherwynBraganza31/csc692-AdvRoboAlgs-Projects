@@ -75,10 +75,10 @@ landmarks_repo = []
 predicted_path_points = []
 actual_path_points = []
 
-"""
-Creates a Shapely Ellipse with the specified params
-"""
 def create_ellipse(center: tuple, axes_lengths:tuple, angle:float):
+    """
+    Creates a Shapely Ellipse with the specified params
+    """
     # create a cricle first
     circ = geom.Point(center).buffer(1)
 
@@ -90,18 +90,18 @@ def create_ellipse(center: tuple, axes_lengths:tuple, angle:float):
 
     return ellr
 
-"""
-Finds the point "distance" units away from the current position(state) 
-"""
 def parametric_point_locator(state: list, angle:float, distance:float) -> list:
+    """
+    Finds the point "distance" units away from the current position(state)
+    """
     return [state[0]+ distance*math.cos(state[2]+angle), state[1]+ distance*math.sin(state[2]+angle)]
 
-"""
-Detects for anomalies.
-An anomaly is a change in distance between 2 consecutive lidar readings 
-that is less than <min_anomaly_distance>
-"""
 def identify_landmark(predicted_state, lidar_distances: np.array) -> list:
+    """
+    Detects for anomalies.
+    An anomaly is a change in distance between 2 consecutive lidar readings
+    that is less than <min_anomaly_distance>
+    """
     anomaly_indices = []
     landmark_shapes = []
 
@@ -118,7 +118,7 @@ def identify_landmark(predicted_state, lidar_distances: np.array) -> list:
         landmark_shapes.append([
             create_ellipse(
                 center=tuple(center),
-                axes_lengths=(lidar_uncertainty, math.pi/20),
+                axes_lengths=(lidar_uncertainty, max_dist * math.sin(math.pi/20)),
                 angle=anomaly*angle_interval),
             lidar_distances[anomaly],
             anomaly*angle_interval
@@ -126,13 +126,13 @@ def identify_landmark(predicted_state, lidar_distances: np.array) -> list:
 
     return landmark_shapes
 
-"""
-Compares landmarks between consecutive sweeps. If the new sweep 
-encounters landmarks that are relatively close to the old ones, 
-then they must be the same landmark and hence it averages out the 
-position from the new and old and refactors it back into the landmark list
-"""
-def refactor_landmarks(new_landmarks:list, landmarks:list, delta_d):
+def refactor_landmarks(new_landmarks:list, landmarks:list, delta_d:float):
+    """
+    Compares landmarks between consecutive sweeps. If the new sweep
+    encounters landmarks that are relatively close to the old ones,
+    then they must be the same landmark and hence it averages out the
+    position from the new and old and refactors it back into the landmark list
+    """
     size = len(new_landmarks)
 
     if len(landmarks) != 0:
@@ -145,7 +145,7 @@ def refactor_landmarks(new_landmarks:list, landmarks:list, delta_d):
                     maj_axis = max(i.distance(i))
                     min_axis = min(i.distance(i))
                     new_center = i.centroid.xy
-                    angle = old_land[2] - new_land[2]
+                    angle = float(np.mean([old_land[2], new_land[2]])[0])
                     landmarks[index] = [
                         create_ellipse(
                             center=tuple(new_center),
@@ -220,7 +220,7 @@ while True:
 
         newfound_landmarks = identify_landmark(predicted_state, lidar_dists)
         if len(newfound_landmarks) != 0:
-            landmarks_repo = refactor_landmarks(newfound_landmarks, landmarks_repo, r/2 * (omega1+omega2)*time_step)
+            landmarks_repo = refactor_landmarks(newfound_landmarks, landmarks_repo, delta_d)
         if len(newfound_landmarks) != 0:
             sensed_state = grab_sensed_state(landmarks_repo, len(newfound_landmarks))
         else:
